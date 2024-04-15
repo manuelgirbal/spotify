@@ -2,3 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
+data_historic/
+lists/
+my_spotify_data.zip
+other/
+MyData/
