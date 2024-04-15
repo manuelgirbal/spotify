@@ -1,9 +1,10 @@
-## Playlists: once you receive your data from Spotify (see README.md), run this script.
+## Playlists: 
+# Once you receive your data from Spotify (see README.md), unzip and save "MyData/" folder in this project's root directory:
 
 library(jsonlite)
 library(tidyverse)
 
-# Read your playlists .json file from "MyData/" folder (you might need to unzip that folder first):
+# Read your playlists .json file:
 lists <- fromJSON("MyData/Playlist1.json", flatten = TRUE)
 
 # Create a vector with the names from each playlist:
