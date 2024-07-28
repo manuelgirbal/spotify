@@ -7,3 +7,5 @@ lists/
 my_spotify_data.zip
 other/
 MyData/
+credentials.R
+.httr-oauth
