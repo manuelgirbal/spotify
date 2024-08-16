@@ -1,5 +1,5 @@
 library(spotifyr)
-library(tidyverse)
+library(tidyverse, warn.conflicts = F)
 library(lubridate)
 
 #### Configuration ####
@@ -20,6 +20,7 @@ access_token <- get_spotify_authorization_code(scope = scope)
 #### Testing analysis ####
 
 ## Playlists analysis
+# Iterating through the get_my_playlists offset argument because of max limit = 50
 i <- 0
 rows <- 0
 my_playlists <- tibble()
@@ -48,19 +49,46 @@ my_playlists <- my_playlists |>
   select(id, name)
 
 
-# Getting tracks from two playlists to compare
+## Getting tracks from two or more playlists to compare
 
-ruta <- my_playlists |> 
-  filter(name == 'Ruta Provincial') |> 
-  select(1)
+# Create a function that iterates through the get_playlist_tracks offset argument because of max limit = 100
+# and through a vector of playlists names
 
-ruta_tracks <- get_playlist_tracks(ruta) 
+get_all_playlist_tracks <- function(playlists) {
+  tracks_list <- list()
+  
+  for (playlist_name in playlists) {
+    j <- 0
+    rows <- 0
+    all_tracks <- tibble()
+    
+    while (j <= rows) {
+      tracks <- get_playlist_tracks(
+        playlist_id = my_playlists[my_playlists$name == playlist_name, 1],
+        limit = 100,
+        offset = j
+      )
+      
+      j <- j + 100
+      all_tracks <- bind_rows(all_tracks, tracks)
+      rows <- nrow(all_tracks)
+    }
+    
+    tracks_list[[playlist_name]] <- all_tracks
+  }
+  
+  return(tracks_list)
+}
 
-pampeano <- my_playlists |> 
-  filter(name == 'Pampeano - Stoner') |> 
-  select(1)
+playlists_to_fetch <- c('Ruta Provincial', 'Slow Burn')
+all_tracks <- get_all_playlist_tracks(playlists_to_fetch)
 
-pampeano_tracks <- get_playlist_tracks(pampeano) 
+# Access the tracks for 'Ruta Provincial'
+ruta_tracks <- all_tracks[['Ruta Provincial']]
+
+# Access the tracks for 'Slow Burn'
+slow_tracks <- all_tracks[['Slow Burn']]
+
 
 
 # Getting features both from playlists and songs:
