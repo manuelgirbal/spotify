@@ -91,8 +91,16 @@ slow_tracks <- all_tracks[['Slow Burn']]
 
 
 
-# Getting features both from playlists and songs:
+# Getting music features:
+
+get_track_audio_analysis(id = slow_tracks$track.id[1])
+get_track_audio_features(ids = slow_tracks$track.id[1:99])
 
 ### SEGUIR CON: 
 # https://www.rdocumentation.org/packages/spotifyr/versions/2.1.1/topics/get_playlist_audio_features
-# https://www.rdocumentation.org/packages/spotifyr/versions/2.1.1/topics/get_track_audio_features
+# https://www.rdocumentation.org/packages/spotifyr/versions/2.2.4/topics/get_artist_audio_features
+# https://www.rdocumentation.org/packages/spotifyr/versions/2.2.4/topics/get_genre_artists 
+
+
+
+
