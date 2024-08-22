@@ -2,6 +2,9 @@ library(spotifyr)
 library(tidyverse, warn.conflicts = F)
 library(lubridate)
 
+options(scipen = 999)  # Large value to avoid scientific notation
+
+
 #### Configuration ####
 
 source("credentials.R")
@@ -17,10 +20,11 @@ scope <- "user-read-recently-played playlist-read-private playlist-read-collabor
 access_token <- get_spotify_authorization_code(scope = scope)
 
 
-#### Testing analysis ####
+#### Data gathering ####
 
-## Playlists analysis
+
 # Iterating through the get_my_playlists offset argument because of max limit = 50
+
 i <- 0
 rows <- 0
 my_playlists <- tibble()
@@ -49,7 +53,7 @@ my_playlists <- my_playlists |>
   select(id, name)
 
 
-## Getting tracks from two or more playlists to compare
+# Getting tracks from two or more playlists to compare
 
 # Create a function that iterates through the get_playlist_tracks offset argument because of max limit = 100
 # and through a vector of playlists names
@@ -93,14 +97,88 @@ slow_tracks <- all_tracks[['Slow Burn']]
 
 # Getting music features:
 
-get_track_audio_analysis(id = slow_tracks$track.id[1])
-get_track_audio_features(ids = slow_tracks$track.id[1:99])
-
-### SEGUIR CON: 
-# https://www.rdocumentation.org/packages/spotifyr/versions/2.1.1/topics/get_playlist_audio_features
-# https://www.rdocumentation.org/packages/spotifyr/versions/2.2.4/topics/get_artist_audio_features
-# https://www.rdocumentation.org/packages/spotifyr/versions/2.2.4/topics/get_genre_artists 
+playlistaudiofeatures <-  get_playlist_audio_features(manuelgg, # More complete than get_track_audio_features
+                                                      c("4OH3OMSL2I9fm6iSwr1KMl","1IpBInrdGIu43h73vb9tCf"))
 
 
+#### Exploratory analysis ####
 
+playlistaudiofeatures_a <- playlistaudiofeatures |> 
+  transmute(playlist_name,
+         track.id,
+         danceability,
+         energy,
+         loudness,
+         speechiness,
+         acousticness,
+         instrumentalness,
+         liveness,
+         valence,
+         mode,
+         key,
+         track.popularity,
+         duration = track.duration_ms/60000) |> 
+  distinct(.keep_all = T) 
+
+playlistaudiofeatures_b <-  playlistaudiofeatures_a |> 
+  pivot_longer(!c(playlist_name,track.id),
+               names_to = "feature_name", 
+               values_to = "feature_value")
+
+
+ggplot(playlistaudiofeatures_b, aes(x = feature_value)) +
+  geom_histogram(binwidth = 0.2, fill = "blue", color = "black") +  
+  facet_grid(playlist_name ~ feature_name,
+             scales="free") +  
+  theme_minimal() +
+  # xlim(-10, 10) +
+  # ylim(0, 50) +
+  labs(title = "Distribution of Musical Features by Playlist",
+       x = "Feature Value", y = "Count")
+
+
+ggplot(playlistaudiofeatures_b, aes(x = feature_value)) +
+  geom_histogram(binwidth = 0.2, fill = "blue", color = "black") +  
+  facet_wrap(~playlist_name + feature_name,
+             scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribution of Musical Features by Playlist",
+       x = "Feature Value", y = "Count")
+
+
+#### k-means cluster analysis ####
+### VER https://www.r-bloggers.com/2023/07/a-gentle-introduction-to-k-means-clustering-in-r-feat-tidyclust/
+
+# standardizing data
+features <- scale(playlistaudiofeatures_a |> select(!c(playlist_name, track.id)))
+
+# clustering
+set.seed(123)  # for reproducibility
+k <- 2  # since you have two playlists
+clusters <- kmeans(features, centers = k, nstart = 25)
+playlistaudiofeatures_a$cluster <- clusters$cluster
+
+# Comparing clusters to playlists
+table(playlistaudiofeatures_a$playlist_name, playlistaudiofeatures_a$cluster)
+
+
+### VER https://ranger.uta.edu/%7Echqding/papers/KmeansPCA1.pdf
+# PCA
+pca <- prcomp(features)
+playlistaudiofeatures_a$pca1 <- pca$x[,1]
+playlistaudiofeatures_a$pca2 <- pca$x[,2]
+
+ggplot(playlistaudiofeatures_a, aes(x = pca1, y = pca2, color = as.factor(cluster))) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Cluster Analysis of Spotify Playlists",
+       color = "Cluster")
+
+
+
+
+
+#### Pending ####
+# https://www.r-bloggers.com/2019/05/quick-and-easy-t-sne-analysis-in-r/
+# Modify playlists based on results
 
