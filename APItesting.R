@@ -177,8 +177,11 @@ for (i in 1:k) {
 
 
 #### Pending ####
-# Add main characteristic description for each kluster-playlist
+# Shiny app:
+  # https://mastering-shiny.org/reactive-motivation.html
+# Add main characteristic description for each kluster-playlist:
+  # https://r-graph-gallery.com/spider-or-radar-chart.html
+  # https://r-graph-gallery.com/lollipop-plot.html 
 # Trying DBSCAN instead of k-means (https://cran.r-project.org/web/packages/dbscan/vignettes/hdbscan.html)
-# Shiny app with user input for k and selecting two playlists
 # Offer how to modify/create playlists based on results
 
