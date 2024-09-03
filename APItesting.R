@@ -59,40 +59,40 @@ my_playlists <- my_playlists |>
 # Create a function that iterates through the get_playlist_tracks offset argument because of max limit = 100
 # and through a vector of playlists names
 
-get_all_playlist_tracks <- function(playlists) {
-  tracks_list <- list()
-  
-  for (playlist_name in playlists) {
-    j <- 0
-    rows <- 0
-    all_tracks <- tibble()
-    
-    while (j <= rows) {
-      tracks <- get_playlist_tracks(
-        playlist_id = my_playlists[my_playlists$name == playlist_name, 1],
-        limit = 100,
-        offset = j
-      )
-      
-      j <- j + 100
-      all_tracks <- bind_rows(all_tracks, tracks)
-      rows <- nrow(all_tracks)
-    }
-    
-    tracks_list[[playlist_name]] <- all_tracks
-  }
-  
-  return(tracks_list)
-}
-
-playlists_to_fetch <- c('Ruta Provincial', 'Slow Burn')
-all_tracks <- get_all_playlist_tracks(playlists_to_fetch)
-
-# Access the tracks for 'Ruta Provincial'
-ruta_tracks <- all_tracks[['Ruta Provincial']]
-
-# Access the tracks for 'Slow Burn'
-slow_tracks <- all_tracks[['Slow Burn']]
+# get_all_playlist_tracks <- function(playlists) {
+#   tracks_list <- list()
+#   
+#   for (playlist_name in playlists) {
+#     j <- 0
+#     rows <- 0
+#     all_tracks <- tibble()
+#     
+#     while (j <= rows) {
+#       tracks <- get_playlist_tracks(
+#         playlist_id = my_playlists[my_playlists$name == playlist_name, 1],
+#         limit = 100,
+#         offset = j
+#       )
+#       
+#       j <- j + 100
+#       all_tracks <- bind_rows(all_tracks, tracks)
+#       rows <- nrow(all_tracks)
+#     }
+#     
+#     tracks_list[[playlist_name]] <- all_tracks
+#   }
+#   
+#   return(tracks_list)
+# }
+# 
+# playlists_to_fetch <- c('Ruta Provincial', 'Slow Burn')
+# all_tracks <- get_all_playlist_tracks(playlists_to_fetch)
+# 
+# # Access the tracks for 'Ruta Provincial'
+# ruta_tracks <- all_tracks[['Ruta Provincial']]
+# 
+# # Access the tracks for 'Slow Burn'
+# slow_tracks <- all_tracks[['Slow Burn']]
 
 
 
@@ -176,12 +176,4 @@ for (i in 1:k) {
   }
 
 
-#### Pending ####
-# Shiny app:
-  # https://mastering-shiny.org/reactive-motivation.html
-# Add main characteristic description for each kluster-playlist:
-  # https://r-graph-gallery.com/spider-or-radar-chart.html
-  # https://r-graph-gallery.com/lollipop-plot.html 
-# Trying DBSCAN instead of k-means (https://cran.r-project.org/web/packages/dbscan/vignettes/hdbscan.html)
-# Offer how to modify/create playlists based on results
 

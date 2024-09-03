@@ -23,7 +23,7 @@ server <- function(input, output, session) {
   # Reactive values
   auth_status <- reactiveVal(FALSE)
   user_playlists <- reactiveVal(NULL)
-  cluster_results <- reactiveVal(NULL)  # New reactive value for cluster results
+  cluster_results <- reactiveVal(NULL)  
   
   # Authentication process
   observeEvent(input$auth_button, {
@@ -63,7 +63,7 @@ server <- function(input, output, session) {
           choices = c(1:10),
           selected = NULL
         ),
-        actionButton("perform_cluster", "Perform Cluster Analysis")  # New button
+        actionButton("perform_cluster", "Perform Cluster Analysis")  
       )
     } else {
       sidebarPanel(
@@ -76,8 +76,8 @@ server <- function(input, output, session) {
   output$dynamic_main_panel <- renderUI({
     if (auth_status()) {
       tagList(
-        plotOutput("playlist_analysis_plot"),
-        verbatimTextOutput("cluster_summary")  # New output for cluster summary
+        # plotOutput("playlist_analysis_plot"), ## CAMBIAR
+        verbatimTextOutput("cluster_summary")  ## CAMBIAR
       )
     }
   })
@@ -96,7 +96,7 @@ server <- function(input, output, session) {
     i <- 0
     rows <- 0
     my_playlists <- tibble()
-    
+
     while (i <= rows) {
       playlists <- get_my_playlists(authorization = access_token,
                                     limit = 50,
@@ -105,53 +105,64 @@ server <- function(input, output, session) {
       my_playlists <- bind_rows(my_playlists, playlists)
       rows <- nrow(my_playlists)
     }
-    
-    my_playlists %>% 
+
+    my_playlists %>%
       select(id, name)
   }
+
   
-  # 3. Track Fetching
-  get_all_playlist_tracks <- function(playlist_ids) {
-    all_tracks <- tibble()
-    
-    for (pid in playlist_ids) {
-      j <- 0
-      rows <- 0
-      playlist_tracks <- tibble()
-      
-      while (j <= rows) {
-        tracks <- get_playlist_tracks(
-          playlist_id = pid,
-          authorization = access_token,
-          limit = 100,
-          offset = j
-        )
-        
-        j <- j + 100
-        playlist_tracks <- bind_rows(playlist_tracks, tracks)
-        rows <- nrow(playlist_tracks)
-      }
-      
-      all_tracks <- bind_rows(all_tracks, playlist_tracks)
-    }
-    
-    return(all_tracks)
-  }
   
-  # 4. Audio Features
+  # # 3. Track Fetching
+  # get_all_playlist_tracks <- function(playlist_ids) {
+  #   all_tracks <- tibble()
+  #   
+  #   for (pid in playlist_ids) {
+  #     j <- 0
+  #     rows <- 0
+  #     playlist_tracks <- tibble()
+  #     
+  #     while (j <= rows) {
+  #       tracks <- get_playlist_tracks(
+  #         playlist_id = pid,
+  #         authorization = access_token,
+  #         limit = 100,
+  #         offset = j
+  #       )
+  #       
+  #       j <- j + 100
+  #       playlist_tracks <- bind_rows(playlist_tracks, tracks)
+  #       rows <- nrow(playlist_tracks)
+  #     }
+  #     
+  #     all_tracks <- bind_rows(all_tracks, playlist_tracks)
+  #   }
+  #   
+  #   return(all_tracks)
+  # }
+  
+  
+  # 4. Audio Features}
+  
   playlist_audio_features <- reactive({
-    req(selected_playlist_tracks())
-    track_ids <- selected_playlist_tracks()$track.id
-    
-    audio_features <- get_track_audio_features(
-      track_ids,
-      authorization = access_token
+
+    req(input$user_name, input$selected_playlists)
+
+    playlist_ids <- user_playlists() |>
+                      filter(name %in% input$selected_playlists) |>
+                      pull(id)
+
+
+    audio_features <- get_playlist_audio_features(
+      input$user_name,
+      playlist_ids#,
+      # authorization = access_token
     )
-    
+
     audio_features %>%
-      select(id, danceability, energy, loudness, speechiness, acousticness, 
+      select(id, danceability, energy, loudness, speechiness, acousticness,
              instrumentalness, liveness, valence, tempo)
   })
+  
   
   # 5. Clustering Analysis
   observeEvent(input$perform_cluster, {
@@ -167,20 +178,20 @@ server <- function(input, output, session) {
     cluster_results(clusters)
   })
   
-  # 6. Visualization
-  output$playlist_analysis_plot <- renderPlot({
-    req(cluster_results(), playlist_audio_features())
-    
-    clusters <- cluster_results()
-    data <- playlist_audio_features() %>%
-      mutate(cluster = as.factor(clusters$cluster))
-    
-    ggplot(data, aes(x = energy, y = valence, color = cluster)) +
-      geom_point(alpha = 0.7) +
-      theme_minimal() +
-      labs(title = "Clustering of Tracks by Energy and Valence",
-           x = "Energy", y = "Valence")
-  })
+  # # 6. Visualization
+  # output$playlist_analysis_plot <- renderPlot({
+  #   req(cluster_results(), playlist_audio_features())
+  #   
+  #   clusters <- cluster_results()
+  #   data <- playlist_audio_features() %>%
+  #     mutate(cluster = as.factor(clusters$cluster))
+  #   
+  #   ggplot(data, aes(x = energy, y = valence, color = cluster)) +
+  #     geom_point(alpha = 0.7) +
+  #     theme_minimal() +
+  #     labs(title = "Clustering of Tracks by Energy and Valence",
+  #          x = "Energy", y = "Valence")
+  # })
   
   # New output for cluster summary
   output$cluster_summary <- renderPrint({
