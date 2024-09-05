@@ -5,6 +5,7 @@ library(tidyr)
 library(ggplot2)
 library(lubridate)
 library(DT)
+library(purrr)
 library(shinythemes)
 
 ui <- fluidPage(
@@ -24,6 +25,7 @@ server <- function(input, output, session) {
   # Reactive values
   auth_status <- reactiveVal(FALSE)
   user_playlists <- reactiveVal(NULL)
+  cluster_results <- reactiveVal(NULL)  
 
   # Authentication process
   observeEvent(input$auth_button, {
@@ -49,13 +51,21 @@ server <- function(input, output, session) {
   output$dynamic_sidebar <- renderUI({
     if (auth_status()) {
       sidebarPanel(
+        # textInput("user_name", "User Name", "Please insert your Spotify User Name"),
         selectInput(
           "selected_playlists",
           "Select Playlists:",
           choices = if (!is.null(user_playlists())) unique(user_playlists()$name) else NULL,
           multiple = TRUE,
           selected = NULL
-        )
+        ),
+        selectInput(
+          "selected_clusters",
+          "Select Amount of New Playlists:",
+          choices = c(1:10),
+          selected = NULL
+        ),
+        actionButton("perform_cluster", "Perform Cluster Analysis")  
         )
     } else {
       sidebarPanel(
@@ -68,7 +78,8 @@ server <- function(input, output, session) {
   output$dynamic_main_panel <- renderUI({
     if (auth_status()) {
       tagList(
-        DTOutput("selected_playlists_output") 
+        verbatimTextOutput("cluster_summary"),
+        DTOutput("selected_playlists_output")
       )
     }
   })
@@ -85,14 +96,14 @@ server <- function(input, output, session) {
   
   # Display the selected playlists
   output$selected_playlists_output <- renderDT({
-
-      datatable(user_playlists() |> 
-                  filter(name %in% input$selected_playlists)
-                )  
-
+      datatable(
+        playlistaudiofeatures_react()
+      )
   })
   
-  # 2. Playlist Fetching (refine if necessary)
+
+  
+  # Playlist Fetching
   fetch_user_playlists <- function(access_token) {
     i <- 0
     rows <- 0
@@ -107,12 +118,92 @@ server <- function(input, output, session) {
       rows <- nrow(my_playlists)
     }
     
-    my_playlists %>%
+    # Temporary fix to get only owned playlists
+    most_freq_user <- my_playlists |> 
+      count(owner.display_name) |> 
+      arrange(desc(n)) |> 
+      slice(1) |> 
+      transmute(user = owner.display_name)
+    
+    my_playlists <- my_playlists |> 
+      filter(owner.display_name == most_freq_user[[1]]) |> 
       select(id, name)
+
   }
-}  
- 
+
+  
+
+    # Getting music features:
+    playlistaudiofeatures_react <- reactive({
+    
+    req(user_playlists())
+    req(input$selected_playlists) ## VER si funciona o debe ser reactive
+    # req(input$user_name) ## VER si funciona o debe ser reactive
+      
+    playlists_filtered <- user_playlists() |> filter(name %in% input$selected_playlists)
+    
+    # playlistaudiofeatures <-  get_playlist_audio_features(input$user_name,
+    #                                                       playlists_filtered$id)
+
+    playlistaudiofeatures <-  get_playlist_audio_features(playlist_uris = playlists_filtered$id)
+    
+    # playlistaudiofeatures <- playlistaudiofeatures |> unnest_wider(track.artists)
 
 
+    playlistaudiofeatures <- playlistaudiofeatures |>
+      transmute(playlist_name,
+                track.id,
+                track.name,
+                # artist = name,
+                artist.name = map_chr(track.artists, function(x) x$name[1]),
+                danceability,
+                energy,
+                loudness,
+                speechiness,
+                acousticness,
+                instrumentalness,
+                liveness,
+                valence,
+                mode,
+                key,
+                track.popularity,
+                duration = round(track.duration_ms/60000,2)) |>
+      distinct(.keep_all = T)
+  })
+
+  
+  observeEvent(input$perform_cluster, {
+    req(playlistaudiofeatures_react(), input$selected_clusters)
+    
+    features <- playlistaudiofeatures_react() %>%
+      select(danceability,
+             energy,
+             loudness,
+             speechiness,
+             acousticness,
+             instrumentalness,
+             liveness,
+             valence,
+             mode,
+             key,
+             track.popularity,
+             duration) %>%
+      scale()
+    
+    set.seed(123)
+    clusters <- kmeans(features, centers = as.numeric(input$selected_clusters), nstart = 25)
+    
+    cluster_results(clusters)
+  })
+
+
+  output$cluster_summary <- renderPrint({
+    req(cluster_results())
+    summary(cluster_results())
+  })
+  
+}
+    
+    
 # Run the app
 shinyApp(ui = ui, server = server)

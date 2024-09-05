@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(lubridate)
+library(purrr)
 
 options(scipen = 999)  # Large value to avoid scientific notation
 
@@ -101,7 +102,7 @@ my_playlists <- my_playlists |>
 playlistaudiofeatures <-  get_playlist_audio_features(manuelgg, # More complete than get_track_audio_features
                                                       c("4OH3OMSL2I9fm6iSwr1KMl","1IpBInrdGIu43h73vb9tCf"))
 
-playlistaudiofeatures <- playlistaudiofeatures |> unnest_wider(track.artists)
+# playlistaudiofeatures <- playlistaudiofeatures |> unnest_wider(track.artists)
 
 #### Exploratory analysis ####
 
@@ -109,7 +110,8 @@ playlistaudiofeatures_a <- playlistaudiofeatures |>
   transmute(playlist_name,
          track.id,
          track.name,
-         artist = name,
+         # artist = name,
+         artist.name = map_chr(track.artists, function(x) x$name[1]),
          danceability,
          energy,
          loudness,
