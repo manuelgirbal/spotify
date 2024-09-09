@@ -25,7 +25,8 @@ server <- function(input, output, session) {
   # Reactive values
   auth_status <- reactiveVal(FALSE)
   user_playlists <- reactiveVal(NULL)
-  cluster_results <- reactiveVal(NULL)  
+  cluster_results <- reactiveVal(NULL)
+  cluster_playlist <- reactiveVal(NULL)
 
   # Authentication process
   observeEvent(input$auth_button, {
@@ -52,17 +53,20 @@ server <- function(input, output, session) {
     if (auth_status()) {
       sidebarPanel(
         # textInput("user_name", "User Name", "Please insert your Spotify User Name"),
-        selectInput(
+        selectizeInput(
           "selected_playlists",
-          "Select Playlists:",
+          "Select up to 2 playlists:",
           choices = if (!is.null(user_playlists())) unique(user_playlists()$name) else NULL,
           multiple = TRUE,
-          selected = NULL
+          selected = NULL,
+          options = list(
+            maxItems = 2
+          )
         ),
         selectInput(
           "selected_clusters",
-          "Select Amount of New Playlists:",
-          choices = c(1:10),
+          "Select up to 4 new playlists:",
+          choices = c(1:4),
           selected = NULL
         ),
         actionButton("perform_cluster", "Perform Cluster Analysis")  
@@ -78,7 +82,8 @@ server <- function(input, output, session) {
   output$dynamic_main_panel <- renderUI({
     if (auth_status()) {
       tagList(
-        verbatimTextOutput("cluster_summary"),
+        # verbatimTextOutput("cluster_summary"),
+        DTOutput("cluster_summary"),
         DTOutput("selected_playlists_output")
       )
     }
@@ -172,10 +177,14 @@ server <- function(input, output, session) {
   })
 
   
+  clusters <- NA  
+    
   observeEvent(input$perform_cluster, {
     req(playlistaudiofeatures_react(), input$selected_clusters)
     
-    features <- playlistaudiofeatures_react() %>%
+    playlist_data <- playlistaudiofeatures_react()
+    
+    features <- playlist_data %>%
       select(danceability,
              energy,
              loudness,
@@ -191,15 +200,30 @@ server <- function(input, output, session) {
       scale()
     
     set.seed(123)
-    clusters <- kmeans(features, centers = as.numeric(input$selected_clusters), nstart = 25)
+    clusters <<- kmeans(features, centers = as.numeric(input$selected_clusters), nstart = 25)
     
-    cluster_results(clusters)
+    # cluster_results(clusters)
+    
+    playlist_data$cluster <- clusters$cluster
+    
+    cluster_playlist(playlist_data)
+    
+    
   })
 
 
-  output$cluster_summary <- renderPrint({
-    req(cluster_results())
-    summary(cluster_results())
+  # output$cluster_summary <- renderPrint({
+  #   req(cluster_results())
+  #   summary(cluster_results())
+  # })
+
+    
+  
+  
+  output$cluster_summary <- renderDT({
+    req(cluster_playlist())
+    datatable(cluster_playlist())
+    
   })
   
 }
