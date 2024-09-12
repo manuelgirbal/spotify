@@ -15,7 +15,7 @@ ui <- fluidPage(
   uiOutput("dynamic_sidebar"),
   
   mainPanel(
-    textOutput("auth_status"),
+    uiOutput("auth_status"),
     uiOutput("dynamic_main_panel")
   )
 )
@@ -27,6 +27,7 @@ server <- function(input, output, session) {
   user_playlists <- reactiveVal(NULL)
   cluster_results <- reactiveVal(NULL)
   cluster_playlist <- reactiveVal(NULL)
+  clustering_performed <- reactiveVal(FALSE)
 
   # Authentication process
   observeEvent(input$auth_button, {
@@ -52,7 +53,6 @@ server <- function(input, output, session) {
   output$dynamic_sidebar <- renderUI({
     if (auth_status()) {
       sidebarPanel(
-        # textInput("user_name", "User Name", "Please insert your Spotify User Name"),
         selectizeInput(
           "selected_playlists",
           "Select up to 2 playlists:",
@@ -65,12 +65,13 @@ server <- function(input, output, session) {
         ),
         selectInput(
           "selected_clusters",
-          "Select up to 4 new playlists:",
-          choices = c(1:4),
+          "Select amount of new playlists:",
+          choices = c(2:4),
           selected = NULL
         ),
         actionButton("perform_cluster", "Perform Cluster Analysis")  
         )
+    # } 
     } else {
       sidebarPanel(
         actionButton("auth_button", "Authorize Spotify")
@@ -81,33 +82,54 @@ server <- function(input, output, session) {
   # Dynamic main panel UI
   output$dynamic_main_panel <- renderUI({
     if (auth_status()) {
-      tagList(
-        # verbatimTextOutput("cluster_summary"),
-        DTOutput("cluster_summary"),
-        DTOutput("selected_playlists_output")
-      )
+      if (clustering_performed()) {  
+        tagList(
+          selectInput(
+            "cluster_filter", 
+            "Select new playlist to display:",
+            choices = unique(cluster_playlist()$cluster),
+            selected = 1,
+            multiple = FALSE
+          ),
+          downloadButton("download_csv", "Download Playlist as CSV"),
+          DTOutput("cluster_summary")
+        )      } else {
+        DTOutput("selected_playlists_output") 
+      }
     }
   })
   
   # Display authentication status
-  output$auth_status <- renderText({
+  output$auth_status <- renderUI({
     if (auth_status()) {
       "Authentication successful! You can now use the app."
     } else {
-      "Please click the 'Authorize Spotify' button to begin."
+      HTML("With this app, you can select two of your Spotify playlists that you feel are a bit mixed up with each other and use them to create between 2 and 4 new playlists. 
+                <hr style='border-color: black; border-width: 1px;'>
+      The app will perform a cluster analysis (k-means) using the musical characteristics of both playlists as input (danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, mode, key, track popularity, and duration).
+                <hr style='border-color: black; border-width: 1px;'>
+      Please click the 'Authorize Spotify' button to begin.")
     }
   })
   
   
   # Display the selected playlists
+  
   output$selected_playlists_output <- renderDT({
-      datatable(
-        playlistaudiofeatures_react()
-      )
-  })
+
+    req(playlistaudiofeatures_react())
+
+    selected_columns <- playlistaudiofeatures_react() |> 
+      select(playlist_name,
+             track.name,
+             artist.name)
+    
+    datatable(selected_columns,
+              rownames = F)
+
+    })
   
 
-  
   # Playlist Fetching
   fetch_user_playlists <- function(access_token) {
     i <- 0
@@ -142,18 +164,14 @@ server <- function(input, output, session) {
     playlistaudiofeatures_react <- reactive({
     
     req(user_playlists())
-    req(input$selected_playlists) ## VER si funciona o debe ser reactive
-    # req(input$user_name) ## VER si funciona o debe ser reactive
-      
+    req(input$selected_playlists) 
+
     playlists_filtered <- user_playlists() |> filter(name %in% input$selected_playlists)
     
-    # playlistaudiofeatures <-  get_playlist_audio_features(input$user_name,
-    #                                                       playlists_filtered$id)
+
 
     playlistaudiofeatures <-  get_playlist_audio_features(playlist_uris = playlists_filtered$id)
     
-    # playlistaudiofeatures <- playlistaudiofeatures |> unnest_wider(track.artists)
-
 
     playlistaudiofeatures <- playlistaudiofeatures |>
       transmute(playlist_name,
@@ -208,23 +226,50 @@ server <- function(input, output, session) {
     
     cluster_playlist(playlist_data)
     
+    clustering_performed(TRUE) 
+    
     
   })
 
 
-  # output$cluster_summary <- renderPrint({
-  #   req(cluster_results())
-  #   summary(cluster_results())
-  # })
-
-    
-  
-  
   output$cluster_summary <- renderDT({
+    
     req(cluster_playlist())
-    datatable(cluster_playlist())
+    
+    selected_columns2 <- cluster_playlist() |>
+        filter(cluster == input$cluster_filter) |> 
+        transmute(new_playlist = cluster,
+                  track.name,
+                  artist.name) |> 
+        distinct()
+
+    datatable(selected_columns2,
+              rownames = F)
     
   })
+  
+  
+  # Download handler for CSV
+  output$download_csv <- downloadHandler(
+    filename = function() {
+      paste("new_playlist_cluster_", input$cluster_filter, ".csv", sep = "")  # Define the filename
+    },
+    content = function(file) {
+      req(cluster_playlist())  # Ensure the cluster data is available
+      
+      # Filter the data according to the selected cluster
+      filtered_data <- cluster_playlist() |>
+        filter(cluster == input$cluster_filter) |>
+        transmute(new_playlist = cluster,
+                  track.name,
+                  artist.name) |>
+        distinct()
+      
+      write.csv(filtered_data, file, row.names = FALSE)  # Write data to CSV file without row names
+    }
+  )
+  
+  
   
 }
     
