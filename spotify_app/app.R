@@ -29,14 +29,31 @@ server <- function(input, output, session) {
   cluster_playlist <- reactiveVal(NULL)
   clustering_performed <- reactiveVal(FALSE)
 
+    # Credentials
+  source("credentials.R")
+  Sys.setenv(SPOTIFY_CLIENT_ID = client_id)
+  Sys.setenv(SPOTIFY_CLIENT_SECRET = client_secret)
+
   # Authentication process
   observeEvent(input$auth_button, {
     tryCatch({
-      source("credentials.R")
-      Sys.setenv(SPOTIFY_CLIENT_ID = client_id)
-      Sys.setenv(SPOTIFY_CLIENT_SECRET = client_secret)
       scope <- "user-read-recently-played playlist-read-private playlist-read-collaborative"
+      
+      # Get the current URL from the session
+      host_url <- session$clientData$url_hostname
+      
+      # Set the redirect URI based on whether it's running locally or on shinyapps.io
+      redirect_uri <- if(grepl("shinyapps.io", host_url)) {
+        "https://manuelgg.shinyapps.io/spotiApp/" 
+      } else {
+        "http://localhost:1410/"
+      }
+      
+      # Set the redirect URI environment variable
+      Sys.setenv(SPOTIFY_CLIENT_REDIRECT_URI = redirect_uri)
+      
       access_token <- get_spotify_authorization_code(scope = scope)
+      
       auth_status(TRUE)
       
       # Fetch playlists after successful authentication
@@ -45,7 +62,9 @@ server <- function(input, output, session) {
       
     }, error = function(e) {
       auth_status(FALSE)
-      showNotification("Authentication failed. Please try again.", type = "error")
+      msg <- paste("Authentication failed:", e$message)
+      message(msg)
+      showNotification(msg, type = "error", duration = NULL)
     })
   })
   
@@ -267,10 +286,7 @@ server <- function(input, output, session) {
       
       write.csv(filtered_data, file, row.names = FALSE)  # Write data to CSV file without row names
     }
-  )
-  
-  
-  
+  ) 
 }
     
     

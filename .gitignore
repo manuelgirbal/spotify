@@ -8,6 +8,7 @@ my_spotify_data.zip
 other/
 MyData/
 .httr-oauth
+credentials.R
 spotify_app/credentials.R
 spotify_app/rsconnnect/
 spotify_app/httr-oauth
