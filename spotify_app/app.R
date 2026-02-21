@@ -1,9 +1,8 @@
 library(shiny)
+library(httr)
 library(spotifyr)
 library(dplyr)
 library(tidyr)
-library(ggplot2)
-library(lubridate)
 library(DT)
 library(purrr)
 library(shinythemes)
@@ -24,38 +23,32 @@ server <- function(input, output, session) {
   
   # Reactive values
   auth_status <- reactiveVal(FALSE)
+  access_token_rv <- reactiveVal(NULL)
   user_playlists <- reactiveVal(NULL)
   cluster_results <- reactiveVal(NULL)
   cluster_playlist <- reactiveVal(NULL)
   clustering_performed <- reactiveVal(FALSE)
 
-    # Credentials
-  source("credentials.R")
-  Sys.setenv(SPOTIFY_CLIENT_ID = client_id)
-  Sys.setenv(SPOTIFY_CLIENT_SECRET = client_secret)
-
-  # Authentication process
+    # Authentication process
   observeEvent(input$auth_button, {
     tryCatch({
       scope <- "user-read-recently-played playlist-read-private playlist-read-collaborative"
-      
-      # Get the current URL from the session
-      host_url <- session$clientData$url_hostname
-      
-      # Set the redirect URI based on whether it's running locally or on shinyapps.io
-      redirect_uri <- if(grepl("shinyapps.io", host_url)) {
-        "https://manuelgg.shinyapps.io/spotiApp/" 
-      } else {
-        "http://localhost:1410/"
-      }
-      
-      # Set the redirect URI environment variable
-      Sys.setenv(SPOTIFY_CLIENT_REDIRECT_URI = redirect_uri)
-      
-      access_token <- get_spotify_authorization_code(scope = scope)
-      
+
+      endpoint <- httr::oauth_endpoint(
+        authorize = "https://accounts.spotify.com/authorize",
+        access    = "https://accounts.spotify.com/api/token"
+      )
+      app <- httr::oauth_app(
+        appname      = "spotifyr",
+        key          = Sys.getenv("SPOTIFY_CLIENT_ID"),
+        secret       = Sys.getenv("SPOTIFY_CLIENT_SECRET"),
+        redirect_uri = Sys.getenv("SPOTIFY_CLIENT_REDIRECT_URI")
+      )
+      access_token <- httr::oauth2.0_token(endpoint, app, scope = scope)
+      access_token_rv(access_token)
+
       auth_status(TRUE)
-      
+
       # Fetch playlists after successful authentication
       playlists <- fetch_user_playlists(access_token)
       user_playlists(playlists)
@@ -152,27 +145,20 @@ server <- function(input, output, session) {
   # Playlist Fetching
   fetch_user_playlists <- function(access_token) {
     i <- 0
-    rows <- 0
     my_playlists <- tibble()
-    
-    while (i <= rows) {
-      playlists <- get_my_playlists(authorization = access_token,
-                                    limit = 50,
-                                    offset = i)
+
+    repeat {
+      batch <- get_my_playlists(authorization = access_token, limit = 50, offset = i)
+      my_playlists <- bind_rows(my_playlists, batch)
+      if (nrow(batch) < 50) break
       i <- i + 50
-      my_playlists <- bind_rows(my_playlists, playlists)
-      rows <- nrow(my_playlists)
     }
     
     # Temporary fix to get only owned playlists
-    most_freq_user <- my_playlists |> 
-      count(owner.display_name) |> 
-      arrange(desc(n)) |> 
-      slice(1) |> 
-      transmute(user = owner.display_name)
-    
-    my_playlists <- my_playlists |> 
-      filter(owner.display_name == most_freq_user[[1]]) |> 
+    user_id <- get_my_profile(authorization = access_token)$id
+
+    my_playlists <- my_playlists |>
+      filter(owner.id == user_id) |>
       select(id, name)
 
   }
@@ -189,7 +175,14 @@ server <- function(input, output, session) {
     
 
 
-    playlistaudiofeatures <-  get_playlist_audio_features(playlist_uris = playlists_filtered$id)
+    playlistaudiofeatures <- tryCatch(
+      get_playlist_audio_features(playlist_uris = playlists_filtered$id, authorization = access_token_rv()),
+      error = function(e) {
+        showNotification(paste("Error fetching tracks:", e$message), type = "error", duration = NULL)
+        NULL
+      }
+    )
+    req(playlistaudiofeatures)
     
 
     playlistaudiofeatures <- playlistaudiofeatures |>
@@ -214,12 +207,16 @@ server <- function(input, output, session) {
   })
 
   
-  clusters <- NA  
-    
   observeEvent(input$perform_cluster, {
     req(playlistaudiofeatures_react(), input$selected_clusters)
-    
+
     playlist_data <- playlistaudiofeatures_react()
+    k <- as.numeric(input$selected_clusters)
+
+    if (nrow(playlist_data) < max(k, 10)) {
+      showNotification("Not enough tracks for clustering. Select playlists with more tracks.", type = "warning", duration = 5)
+      return()
+    }
     
     features <- playlist_data %>%
       select(danceability,
@@ -237,11 +234,17 @@ server <- function(input, output, session) {
       scale()
     
     set.seed(123)
-    clusters <<- kmeans(features, centers = as.numeric(input$selected_clusters), nstart = 25)
-    
-    # cluster_results(clusters)
-    
-    playlist_data$cluster <- clusters$cluster
+    km <- tryCatch(
+      kmeans(features, centers = k, nstart = 25),
+      error = function(e) {
+        showNotification(paste("Clustering failed:", e$message), type = "error", duration = NULL)
+        NULL
+      }
+    )
+    req(km)
+    cluster_results(km)
+
+    playlist_data$cluster <- km$cluster
     
     cluster_playlist(playlist_data)
     

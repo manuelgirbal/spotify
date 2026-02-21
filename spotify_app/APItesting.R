@@ -10,13 +10,6 @@ options(scipen = 999)  # Large value to avoid scientific notation
 
 #### Configuration ####
 
-source("credentials.R")
-
-# Set Spotify Client ID and Secret
-Sys.setenv(SPOTIFY_CLIENT_ID = client_id)
-Sys.setenv(SPOTIFY_CLIENT_SECRET = client_secret)
-
-# Specify the required scope for the operations
 scope <- "user-read-recently-played playlist-read-private playlist-read-collaborative"
 
 # Obtain the authorization code with the specified scope
@@ -43,15 +36,10 @@ while (i <= rows) {
   }
 
 
-# Temporary fix to get only owned playlists
-most_freq_user <- my_playlists |> 
-  count(owner.display_name) |> 
-  arrange(desc(n)) |> 
-  slice(1) |> 
-  transmute(user = owner.display_name)
+user_id <- get_my_profile(authorization = access_token)$id
 
-my_playlists <- my_playlists |> 
-  filter(owner.display_name == most_freq_user[[1]]) |> 
+my_playlists <- my_playlists |>
+  filter(owner.id == user_id) |>
   select(id, name)
 
 
@@ -155,7 +143,7 @@ playlistaudiofeatures_a <- playlistaudiofeatures |>
 #### k-means cluster analysis ####
 
 # standardizing data
-features <- scale(playlistaudiofeatures_a |> select(!c(playlist_name, track.id, track.name, artist)))
+features <- scale(playlistaudiofeatures_a |> select(!c(playlist_name, track.id, track.name, artist.name)))
 
 # clustering
 set.seed(123)  # for reproducibility
@@ -171,7 +159,7 @@ playlistaudiofeatures_a$cluster <- clusters$cluster
 for (i in 1:k) {
   playlist <- playlistaudiofeatures_a |> 
     filter(cluster == i) |> 
-    select(track.id, track.name, artist) |> 
+    select(track.id, track.name, artist.name) |> 
     distinct()
   
   assign(paste0("new_playlist_", i), playlist, envir = .GlobalEnv)

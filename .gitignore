@@ -11,6 +11,7 @@ MyData/
 credentials.R
 spotify_app/credentials.R
 spotify_app/rsconnnect/
+.Renviron
 spotify_app/rsconnect/
 spotify_app/httr-oauth
 
