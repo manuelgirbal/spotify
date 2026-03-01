@@ -1,20 +1,2 @@
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
-data_historic/
-lists/
-my_spotify_data.zip
-other/
-MyData/
-.httr-oauth
-credentials.R
-spotify_app/credentials.R
-spotify_app/rsconnnect/
 .Renviron
-spotify_app/rsconnect/
 spotify_app/.httr-oauth
-
-# Claude Code
-CLAUDE.md
-.claude/
