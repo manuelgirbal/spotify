@@ -13,8 +13,6 @@ library(dbscan)
 library(zip)
 library(tidyclust)
 
-for (f in list.files("R", full.names = TRUE, pattern = "\\.R$")) source(f)
-
 ui <- navbarPage(
   "SpotiApp",
   theme = shinytheme("cyborg"),
