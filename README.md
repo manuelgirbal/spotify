@@ -1,6 +1,6 @@
 # SpotiApp
 
-A local Shiny app to analyze and reorganize your Spotify playlists using clustering techniques
+A **local** Shiny app to analyze and reorganize your Spotify playlists using clustering techniques
 
 ## What it does
 
@@ -9,11 +9,16 @@ A local Shiny app to analyze and reorganize your Spotify playlists using cluster
 - Run k-means or DBSCAN clustering on their tracks using artist and track features (popularity, duration, explicitness, release year, artist popularity, genre tags)
 - Browse results by cluster, see a feature comparison chart, download clusters as CSV, or save them directly as new private playlists in your Spotify account
 
+![clustering](screenshots/clustering.png)
+
 **Backup tab**
 - Export any of your playlists as CSV
 - Or download all of them at once as a ZIP (one CSV per playlist)
 
+![backup](screenshots/backup.png)
+
 **Key decisions:**
+
 - **No audio features endpoint**: Spotify deprecated `/v1/audio-features` (403 on apps created after ~2024). Features are derived from `/v1/artists` (popularity, genres) and track metadata (duration, explicit, release year).
 
 ## Setup
