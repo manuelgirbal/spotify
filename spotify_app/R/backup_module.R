@@ -7,7 +7,12 @@ write_playlists_zip <- function(playlists, file) {
   dir   <- tempfile("backup_")
   dir.create(dir)
   paths <- file.path(dir, paste0(safe_filename(playlists$name), ".csv"))
-  purrr::walk2(playlists$id, paths, \(id, path) write.csv(backup_tracks(id), path, row.names = FALSE))
+  withProgress(message = "Exporting playlists", value = 0, {
+    for (i in seq_along(paths)) {
+      incProgress(1 / length(paths), detail = playlists$name[i])
+      write.csv(backup_tracks(playlists$id[i]), paths[i], row.names = FALSE)
+    }
+  })
   zip::zip(file, files = paths, mode = "cherry-pick")
 }
 

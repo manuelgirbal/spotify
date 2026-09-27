@@ -74,12 +74,16 @@ organizeServer <- function(id, user_id, user_playlists) {
     }
 
     load_playlists <- function(pids) {
-      for (pid in pids) {
-        snapshot <- fetch_playlist_snapshot(pid)
-        tracks   <- fetch_tracks_with_artists(dplyr::tibble(id = pid, name = name_of(pid)))
-        entry    <- list(tracks = tracks, snapshot = snapshot, name = name_of(pid))
-        loaded(utils::modifyList(loaded(), stats::setNames(list(entry), pid)))
-      }
+      if (length(pids) == 0) return()
+      withProgress(message = "Loading playlist", value = 0, {
+        for (pid in pids) {
+          incProgress(1 / length(pids), detail = name_of(pid))
+          snapshot <- fetch_playlist_snapshot(pid)
+          tracks   <- fetch_tracks_with_artists(dplyr::tibble(id = pid, name = name_of(pid)))
+          entry    <- list(tracks = tracks, snapshot = snapshot, name = name_of(pid))
+          loaded(utils::modifyList(loaded(), stats::setNames(list(entry), pid)))
+        }
+      })
     }
 
     observe({
@@ -178,7 +182,8 @@ organizeServer <- function(id, user_id, user_playlists) {
         with_notify(reload_after_write(changed), "Error reloading")
         return()
       }
-      changes <- with_notify(commit_changes(pending, original()), "Error sending changes (reloaded to show the real state)")
+      changes <- withProgress(message = "Sending changes to Spotify",
+        with_notify(commit_changes(pending, original()), "Error sending changes (reloaded to show the real state)"))
       with_notify(reload_after_write(pids), "Error reloading")
       req(changes)
       last_commit(list(changes = changes, deleted = character(), snapshots = purrr::map(loaded()[pids], "snapshot")))
@@ -232,7 +237,7 @@ organizeServer <- function(id, user_id, user_playlists) {
         showNotification(paste("Can't revert:", paste(name_of(changed), collapse = ", "), "changed in Spotify since."), type = "error", duration = NULL)
         return()
       }
-      with_notify(revert_changes(commit), "Error reverting")
+      withProgress(message = "Reverting in Spotify", with_notify(revert_changes(commit), "Error reverting"))
       with_notify(reload_after_write(pids), "Error reloading")
       last_commit(NULL)
       showNotification("Last change reverted.", type = "message")

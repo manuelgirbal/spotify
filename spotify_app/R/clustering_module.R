@@ -11,7 +11,7 @@ clusteringUI <- function(id) {
       width = 300,
       selectizeInput(ns("playlists"), "Playlists (up to 2)", choices = NULL, multiple = TRUE,
                      options = list(maxItems = 2)),
-      actionButton(ns("load"), "Load tracks"),
+      input_task_button(ns("load"), "Load tracks"),
       hr(),
       radioButtons(ns("algo"), span("Algorithm ", popover(icon("circle-info"), algo_help)),
                    choices = c("k-means", "HDBSCAN"), inline = TRUE),
@@ -20,7 +20,7 @@ clusteringUI <- function(id) {
       conditionalPanel("input.algo == 'HDBSCAN'", ns = ns,
         sliderInput(ns("min_pts"), "Minimum group size", min = 5, max = 30, value = 15)),
       sliderInput(ns("genre_weight"), "Genre weight", min = 0, max = 1, value = 1, step = 0.25),
-      actionButton(ns("run"), "Run clustering", class = "btn-primary")
+      input_task_button(ns("run"), "Run clustering")
     ),
     uiOutput(ns("notice")),
     navset_card_tab(
@@ -59,7 +59,9 @@ clusteringServer <- function(id, user_id, user_playlists) {
     observeEvent(input$load, {
       req(input$playlists)
       selected <- dplyr::filter(user_playlists(), id %in% input$playlists)
-      tracks(with_notify(fetch_tracks_with_artists(selected) |> add_genre_columns(), "Error fetching tracks"))
+      withProgress(message = "Loading tracks and artists from Spotify", {
+        tracks(with_notify(fetch_tracks_with_artists(selected) |> add_genre_columns(), "Error fetching tracks"))
+      })
       result(NULL)
     })
 

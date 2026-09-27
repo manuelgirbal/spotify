@@ -24,11 +24,11 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$login, {
-    with_notify({
+    withProgress(message = "Connecting to Spotify", with_notify({
       me <- fetch_me()
       user_playlists(fetch_user_playlists(me$id))
       user_id(me$id)
-    }, "Login failed")
+    }, "Login failed"))
   })
 
   clusteringServer("clustering", user_id, user_playlists)
