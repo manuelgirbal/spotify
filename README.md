@@ -1,25 +1,38 @@
 # SpotiApp
 
-A **local** Shiny app to analyze and reorganize your Spotify playlists using clustering techniques
+A **local** Shiny app to analyze, reorganize and back up your Spotify playlists.
 
 ## What it does
 
-**Clustering tab**
-- Select up to 2 of your playlists
-- Run k-means or DBSCAN clustering on their tracks using artist and track features (popularity, duration, explicitness, release year, artist popularity, genre tags)
-- Browse results by cluster, see a feature comparison chart, download clusters as CSV, or save them directly as new private playlists in your Spotify account
+**Clustering**
+- Pick up to 2 of your playlists and load their tracks
+- Group them with k-means (you choose 2–4 groups) or HDBSCAN (finds the number of groups itself) using track and artist features: popularity, duration, explicitness, release year, artist popularity and genre tags
+- A genre weight slider controls how much genres drive the grouping
+- Browse each cluster, compare them on a radar chart, download a cluster as CSV or save it as a new private playlist
 
 ![clustering](screenshots/clustering.png)
 
-**Backup tab**
-- Export any of your playlists as CSV
-- Or download all of them at once as a ZIP (one CSV per playlist)
+**Organize**
+- Two playlists side by side with track metadata (album, year, duration, popularity, genres, date added)
+- Move or copy tracks between them. Changes stay pending (with Undo) until you confirm
+- Confirm sends only the net changes to Spotify and refuses if a playlist was edited elsewhere in the meantime
+- Every confirmed change is saved in a local history and can be reverted later, even after restarting the app. Tracks go back to their original positions
+- If a playlist ends up empty, the app offers to delete it (reverting brings it back)
+
+**Backup**
+- Export any playlists as CSV, or all of them as a ZIP (one CSV per playlist)
+- Each export also saves a local snapshot. Playlist history compares two snapshots and lists added and removed tracks
 
 ![backup](screenshots/backup.png)
 
+## Stack
+
+R, Shiny + bslib, httr2 (Spotify Web API, OAuth with PKCE), dplyr/tidyr/purrr, tidyclust + dbscan, plotly, DT, DuckDB (local history), renv.
+
 **Key decisions:**
 
-- **No audio features endpoint**: Spotify deprecated `/v1/audio-features` (403 on apps created after ~2024). Features are derived from `/v1/artists` (popularity, genres) and track metadata (duration, explicit, release year).
+- **No audio features endpoint**: Spotify deprecated `/v1/audio-features` (403 on apps created after ~2024). Features come from `/v1/artists` (popularity, genres) and track metadata (duration, explicit, release year).
+- **Local only**: the OAuth token is cached encrypted in your user cache directory, and history lives in `spotify_app/spotiapp.duckdb`. Both stay on your machine and out of git.
 
 ## Setup
 
@@ -43,9 +56,13 @@ Restart your R session after saving.
 
 ### 2. Install dependencies
 
+Open R in the project root (renv activates on its own) and run:
+
 ```r
 renv::restore()
 ```
+
+The lockfile uses Posit Package Manager, so on Linux packages install as binaries.
 
 ### 3. Run the app
 
@@ -53,4 +70,4 @@ renv::restore()
 shiny::runApp("spotify_app")
 ```
 
-The app opens at `http://127.0.0.1:3838`. A browser window will prompt you to authorize your Spotify account.
+The app opens at `http://127.0.0.1:3838`. Click **Log in with Spotify** (top right); the first time, a browser window asks you to authorize the app.
