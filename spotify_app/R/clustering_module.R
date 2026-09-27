@@ -9,13 +9,11 @@ clusteringUI <- function(id) {
   )
 }
 
-clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, user_id_rv) {
+clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    cluster_results      <- reactiveVal(NULL)
-    cluster_playlist     <- reactiveVal(NULL)
-    clustering_performed <- reactiveVal(FALSE)
+    cluster_playlist <- reactiveVal(NULL)
 
     observeEvent(input$auth_button, {
       tryCatch({
@@ -37,19 +35,18 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
         )
         access_token <- httr::oauth2.0_token(endpoint, app, scope = scope)
         access_token_rv(access_token)
-        auth_status(TRUE)
 
         result <- fetch_user_playlists(access_token)
         user_playlists(result$playlists)
         user_id_rv(result$user_id)
       }, error = function(e) {
-        auth_status(FALSE)
+        access_token_rv(NULL)
         showNotification(paste("Authentication failed:", e$message), type = "error", duration = NULL)
       })
     })
 
     output$dynamic_sidebar <- renderUI({
-      if (auth_status()) {
+      if (!is.null(access_token_rv())) {
         sidebarPanel(
           selectizeInput(
             ns("selected_playlists"),
@@ -115,7 +112,7 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
     })
 
     output$auth_status <- renderUI({
-      if (auth_status()) {
+      if (!is.null(access_token_rv())) {
         "Authentication successful! You can now use the app."
       } else {
         HTML("With this app, you can select two of your Spotify playlists that you feel are a bit mixed up with each other and use them to create between 2 and 4 new playlists.
@@ -127,8 +124,8 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
     })
 
     output$dynamic_main_panel <- renderUI({
-      if (auth_status()) {
-        if (clustering_performed()) {
+      if (!is.null(access_token_rv())) {
+        if (!is.null(cluster_playlist())) {
           clusters_available <- sort(unique(cluster_playlist()$cluster))
           tabs <- lapply(clusters_available, function(cl) {
             label <- if (cl == 0) "Unclassified" else paste("Playlist", cl)
@@ -195,7 +192,7 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
           artist_popularity,
           dplyr::across(dplyr::starts_with("genre_"))
         ) |>
-        dplyr::distinct(.keep_all = TRUE)
+        dplyr::distinct(track.id, .keep_all = TRUE)
     })
 
     observe({
@@ -221,8 +218,11 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
       req(playlistaudiofeatures_react())
       playlist_data <- playlistaudiofeatures_react()
 
+      playlist_data <- playlist_data |>
+        dplyr::filter(dplyr::if_all(c(popularity, duration, explicit, release_year, artist_popularity), \(x) !is.na(x)))
       features <- playlist_data |>
         dplyr::select(popularity, duration, explicit, release_year, artist_popularity, dplyr::starts_with("genre_")) |>
+        dplyr::select(dplyr::where(\(x) stats::sd(x) > 0)) |>
         scale()
 
       if (input$algo == "k-means") {
@@ -242,7 +242,6 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
           NULL
         })
         req(fitted_km)
-        cluster_results(fitted_km)
         # .cluster is a factor — convert to int to match DBSCAN's format
         playlist_data$cluster <- as.integer(
           tidyclust::extract_cluster_assignment(fitted_km)$.cluster
@@ -264,12 +263,10 @@ clusteringServer <- function(id, auth_status, access_token_rv, user_playlists, u
           )
           return()
         }
-        cluster_results(db)
         playlist_data$cluster <- db$cluster
       }
 
       cluster_playlist(playlist_data)
-      clustering_performed(TRUE)
     })
 
     output$cluster_summary <- renderDT({

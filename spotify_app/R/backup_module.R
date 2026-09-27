@@ -3,12 +3,12 @@ backupUI <- function(id) {
   uiOutput(ns("backup_panel"))
 }
 
-backupServer <- function(id, auth_status, access_token_rv, user_playlists) {
+backupServer <- function(id, access_token_rv, user_playlists) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     output$backup_panel <- renderUI({
-      if (!auth_status()) {
+      if (is.null(access_token_rv())) {
         return(p("Please authorize the app in the Clustering tab first."))
       }
       fluidRow(
