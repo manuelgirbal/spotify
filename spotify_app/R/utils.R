@@ -10,6 +10,10 @@ playlist_choices <- function(playlists) {
   stats::setNames(playlists$id, playlists$name)
 }
 
+keep_selected <- function(value, choices, fallback = choices[1]) {
+  if (isTRUE(value %in% choices)) value else fallback
+}
+
 safe_filename <- function(x) make.unique(gsub("[^a-zA-Z0-9]", "_", x), sep = "_")
 
 login_notice <- function() {

@@ -30,15 +30,22 @@ commit_changes <- function(diff, original) {
 }
 
 # Re-inserting in ascending original position, one run of consecutive positions per request,
-# restores the original order
+# restores the original order. If the playlist changed since, positions are clamped to its length
+# and tracks already back in it are skipped.
 revert_changes <- function(record) {
   for (pid in record$deleted) follow_playlist(pid)
   for (pid in names(record$changes)) {
     change <- record$changes[[pid]]
     if (length(change$added)) remove_tracks(pid, change$added)
-    removed <- dplyr::arrange(change$removed, position)
+    current <- fetch_tracks(pid)$track_id
+    removed <- change$removed |>
+      dplyr::filter(!track_id %in% current) |>
+      dplyr::arrange(position)
     if (nrow(removed) == 0) next
-    runs    <- split(removed, cumsum(c(1, diff(removed$position) != 1)))
-    for (run in runs) add_tracks(pid, run$track_id, position = run$position[1])
+    size <- length(current)
+    for (run in split(removed, cumsum(c(1, diff(removed$position) != 1)))) {
+      add_tracks(pid, run$track_id, position = min(run$position[1], size))
+      size <- size + nrow(run)
+    }
   }
 }

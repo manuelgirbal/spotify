@@ -27,9 +27,15 @@ organizeUI <- function(id) {
         class = "d-flex gap-2",
         actionButton(ns("undo"), "Undo"),
         actionButton(ns("discard"), "Discard all"),
-        actionButton(ns("confirm"), "Confirm", class = "btn-success"),
-        actionButton(ns("revert"), "Revert last change", class = "btn-outline-warning ms-auto")
+        actionButton(ns("confirm"), "Confirm", class = "btn-success")
       )
+    ),
+    card(
+      fill = FALSE,
+      card_header("History"),
+      p(class = "text-muted", "Every confirmed change is saved locally. Select one to revert it, even from a previous session."),
+      DTOutput(ns("history"), fill = FALSE),
+      div(actionButton(ns("revert"), "Revert selected change", class = "btn-outline-warning"))
     )
   )
 }
@@ -58,12 +64,13 @@ tracks_table <- function(current, original) {
                 boxShadow = styleEqual("added", "inset 0 0 0 9999px rgba(29, 185, 84, 0.35)"))
 }
 
-organizeServer <- function(id, user_id, user_playlists) {
+organizeServer <- function(id, user_id, user_playlists, db_version) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    loaded      <- reactiveVal(list())
-    ops         <- reactiveVal(list())
-    last_commit <- reactiveVal(NULL)
+    loaded         <- reactiveVal(list())
+    ops            <- reactiveVal(list())
+    last_commit_id <- reactiveVal(NULL)
+    history        <- reactiveVal(with_notify(load_commits(), "Error reading history"))
 
     original <- reactive(purrr::map(loaded(), "tracks"))
     current  <- reactive(apply_ops(original(), ops()))
@@ -88,9 +95,8 @@ organizeServer <- function(id, user_id, user_playlists) {
 
     observe({
       choices <- playlist_choices(user_playlists())
-      keep    <- function(value, fallback) if (isTRUE(value %in% choices)) value else fallback
-      updateSelectInput(session, "left", choices = choices, selected = keep(isolate(input$left), choices[1]))
-      updateSelectInput(session, "right", choices = choices, selected = keep(isolate(input$right), choices[2]))
+      updateSelectInput(session, "left", choices = choices, selected = keep_selected(isolate(input$left), choices))
+      updateSelectInput(session, "right", choices = choices, selected = keep_selected(isolate(input$right), choices, choices[2]))
     })
 
     observeEvent(c(input$left, input$right), {
@@ -182,11 +188,15 @@ organizeServer <- function(id, user_id, user_playlists) {
         with_notify(reload_after_write(changed), "Error reloading")
         return()
       }
+      purrr::walk(pids, \(pid) save_snapshot(original()[[pid]], pid, name_of(pid), loaded()[[pid]]$snapshot))
+      names   <- stats::setNames(name_of(pids), pids)
       changes <- withProgress(message = "Sending changes to Spotify",
         with_notify(commit_changes(pending, original()), "Error sending changes (reloaded to show the real state)"))
       with_notify(reload_after_write(pids), "Error reloading")
       req(changes)
-      last_commit(list(changes = changes, deleted = character(), snapshots = purrr::map(loaded()[pids], "snapshot")))
+      last_commit_id(log_commit(changes, names, purrr::map(loaded()[pids], "snapshot")))
+      history(load_commits())
+      db_version(db_version() + 1)
       showNotification("Changes sent to Spotify.", type = "message")
 
       empty <- intersect(pids, user_playlists()$id[user_playlists()$total == 0])
@@ -194,7 +204,7 @@ organizeServer <- function(id, user_id, user_playlists) {
         showModal(modalDialog(
           title = "Empty playlists",
           p("These playlists are now empty: ", strong(paste(name_of(empty), collapse = ", ")), ". Delete them?"),
-          p(class = "text-muted", "You can bring them back with Revert last change."),
+          p(class = "text-muted", "You can bring them back by reverting this change from History."),
           footer = tagList(modalButton("Keep"), actionButton(ns("delete_empty"), "Delete", class = "btn-danger"))
         ))
       }
@@ -202,45 +212,75 @@ organizeServer <- function(id, user_id, user_playlists) {
 
     observeEvent(input$delete_empty, {
       removeModal()
-      empty <- intersect(names(last_commit()$changes), user_playlists()$id[user_playlists()$total == 0])
+      empty <- intersect(names(load_commit(last_commit_id())$changes), user_playlists()$id[user_playlists()$total == 0])
       deleted <- with_notify({
         purrr::walk(empty, unfollow_playlist)
         empty
       }, "Error deleting playlist")
       req(deleted)
-      last_commit(utils::modifyList(last_commit(), list(deleted = deleted)))
+      log_deleted(last_commit_id(), deleted)
       user_playlists(fetch_user_playlists(user_id()))
     })
 
+    output$history <- renderDT({
+      req(history())
+      history() |>
+        dplyr::transmute(
+          When    = format(ts, "%Y-%m-%d %H:%M", tz = Sys.timezone()),
+          Changes = summary,
+          Status  = ifelse(reverted, "Reverted", "")
+        ) |>
+        datatable(rownames = FALSE, selection = "single", class = "compact hover",
+                  options = list(pageLength = 5, dom = "tp", ordering = FALSE))
+    })
+
+    selected_commit <- reactive({
+      row <- input$history_rows_selected
+      if (length(row) == 0) return(NULL)
+      history()[row, ]
+    })
+
     observeEvent(input$revert, {
-      if (is.null(last_commit())) {
-        showNotification("Nothing to revert in this session.", type = "warning")
+      commit <- selected_commit()
+      if (is.null(commit)) {
+        showNotification("Select a change in History first.", type = "warning")
+        return()
+      }
+      if (commit$reverted) {
+        showNotification("That change was already reverted.", type = "warning")
         return()
       }
       if (length(ops())) {
         showNotification("Confirm or discard pending changes first.", type = "warning")
         return()
       }
+      record  <- load_commit(commit$commit_id)
+      changed <- with_notify(changed_in_spotify(names(record$changes), record$snapshots), "Error checking playlists")
       showModal(modalDialog(
-        title = "Revert last change?",
+        title = "Revert this change?",
+        p(commit$summary),
         p("Tracks go back to their original playlists and positions. Deleted playlists are restored."),
+        if (length(changed)) p(class = "text-warning", paste0(
+          paste(record$names[changed], collapse = ", "),
+          " changed since. Tracks will be restored as close as possible to their original positions.")),
         footer = tagList(modalButton("Cancel"), actionButton(ns("revert_ok"), "Revert", class = "btn-warning"))
       ))
     })
 
     observeEvent(input$revert_ok, {
       removeModal()
-      commit <- last_commit()
-      pids   <- names(commit$changes)
-      changed <- changed_in_spotify(pids, commit$snapshots)
-      if (length(changed)) {
-        showNotification(paste("Can't revert:", paste(name_of(changed), collapse = ", "), "changed in Spotify since."), type = "error", duration = NULL)
-        return()
-      }
-      withProgress(message = "Reverting in Spotify", with_notify(revert_changes(commit), "Error reverting"))
-      with_notify(reload_after_write(pids), "Error reloading")
-      last_commit(NULL)
-      showNotification("Last change reverted.", type = "message")
+      commit_id <- selected_commit()$commit_id
+      record    <- load_commit(commit_id)
+      done <- withProgress(message = "Reverting in Spotify", with_notify({
+        revert_changes(record)
+        TRUE
+      }, "Error reverting"))
+      with_notify(reload_after_write(c(names(record$changes), record$deleted)), "Error reloading")
+      req(done)
+      log_revert(commit_id)
+      history(load_commits())
+      db_version(db_version() + 1)
+      showNotification("Change reverted.", type = "message")
     })
   })
 }

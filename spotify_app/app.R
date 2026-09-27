@@ -17,6 +17,7 @@ ui <- page_navbar(
 server <- function(input, output, session) {
   user_id        <- reactiveVal(NULL)
   user_playlists <- reactiveVal(NULL)
+  db_version     <- reactiveVal(0)
 
   output$login_ui <- renderUI({
     if (is.null(user_id())) actionButton("login", "Log in with Spotify", class = "btn-success btn-sm")
@@ -32,8 +33,8 @@ server <- function(input, output, session) {
   })
 
   clusteringServer("clustering", user_id, user_playlists)
-  organizeServer("organize", user_id, user_playlists)
-  backupServer("backup", user_id, user_playlists)
+  organizeServer("organize", user_id, user_playlists, db_version)
+  backupServer("backup", user_id, user_playlists, db_version)
 }
 
 options(shiny.port = 3838)
