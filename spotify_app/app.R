@@ -1,26 +1,37 @@
 library(shiny)
-library(dplyr)
+library(bslib)
 library(DT)
-library(purrr)
-library(shinythemes)
 library(plotly)
-library(dbscan)
-library(zip)
-library(tidyclust)
 
-ui <- navbarPage(
-  "SpotiApp",
-  theme = shinytheme("cyborg"),
-  tabPanel("Clustering", clusteringUI("clustering")),
-  tabPanel("Backup",     backupUI("backup"))
+ui <- page_navbar(
+  title = "SpotiApp",
+  fillable = FALSE,
+  theme = bs_theme(version = 5, preset = "cyborg"),
+  nav_panel("Clustering", clusteringUI("clustering")),
+  nav_panel("Backup", backupUI("backup")),
+  nav_spacer(),
+  nav_item(uiOutput("login_ui"))
 )
 
 server <- function(input, output, session) {
-  user_playlists  <- reactiveVal(NULL)
-  user_id_rv      <- reactiveVal(NULL)
+  user_id        <- reactiveVal(NULL)
+  user_playlists <- reactiveVal(NULL)
 
-  clusteringServer("clustering", user_id_rv, user_playlists)
-  backupServer("backup", user_id_rv, user_playlists)
+  output$login_ui <- renderUI({
+    if (is.null(user_id())) actionButton("login", "Log in with Spotify", class = "btn-success btn-sm")
+    else span(class = "navbar-text", "Connected to Spotify")
+  })
+
+  observeEvent(input$login, {
+    with_notify({
+      me <- fetch_me()
+      user_playlists(fetch_user_playlists(me$id))
+      user_id(me$id)
+    }, "Login failed")
+  })
+
+  clusteringServer("clustering", user_id, user_playlists)
+  backupServer("backup", user_id, user_playlists)
 }
 
 options(shiny.port = 3838)

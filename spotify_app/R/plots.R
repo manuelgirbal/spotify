@@ -24,7 +24,8 @@ radar_plot <- function(tracks) {
     dplyr::arrange(label, factor(feature, levels = feature_cols)) |>
     dplyr::group_by(label) |>
     dplyr::group_modify(\(d, key) dplyr::bind_rows(d, d[1, ])) |>
-    dplyr::ungroup()
+    dplyr::ungroup() |>
+    dplyr::mutate(feature = feature_labels[match(feature, feature_cols)])
 
   plotly::plot_ly(
     radar,

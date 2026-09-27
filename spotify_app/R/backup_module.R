@@ -3,91 +3,61 @@ backup_tracks <- function(playlist_id) {
     dplyr::select(track_name, artist_name, album_name, duration_min, explicit, release_year, added_at)
 }
 
-backupUI <- function(id) {
-  ns <- NS(id)
-  uiOutput(ns("backup_panel"))
+write_playlists_zip <- function(playlists, file) {
+  dir   <- tempfile("backup_")
+  dir.create(dir)
+  paths <- file.path(dir, paste0(safe_filename(playlists$name), ".csv"))
+  purrr::walk2(playlists$id, paths, \(id, path) write.csv(backup_tracks(id), path, row.names = FALSE))
+  zip::zip(file, files = paths, mode = "cherry-pick")
 }
 
-backupServer <- function(id, user_id_rv, user_playlists) {
-  moduleServer(id, function(input, output, session) {
-    ns <- session$ns
-
-    output$backup_panel <- renderUI({
-      if (is.null(user_id_rv())) {
-        return(p("Please authorize the app in the Clustering tab first."))
-      }
-      fluidRow(
-        column(5,
-          h4("Export selected playlists"),
-          selectizeInput(
-            ns("backup_playlists"),
-            "Select one or more playlists:",
-            choices  = if (!is.null(user_playlists()))
-              setNames(user_playlists()$id, user_playlists()$name)
-            else NULL,
-            multiple = TRUE,
-            selected = NULL
-          ),
-          downloadButton(ns("backup_download"), "Export as CSV / ZIP"),
-          hr(),
-          h4("Full backup"),
-          p("Download all your playlists as a ZIP, one CSV per playlist."),
-          downloadButton(ns("backup_all"), "Download all as ZIP")
-        )
+backupUI <- function(id) {
+  ns <- NS(id)
+  tagList(
+    uiOutput(ns("notice")),
+    layout_columns(
+      card(
+        card_header("Export selected playlists"),
+        selectizeInput(ns("playlists"), "Playlists", choices = NULL, multiple = TRUE, width = "100%"),
+        p(class = "text-muted", "One playlist downloads as CSV, several as a ZIP."),
+        downloadButton(ns("download"), "Export")
+      ),
+      card(
+        card_header("Full backup"),
+        p("Download all your playlists as a ZIP, one CSV per playlist."),
+        downloadButton(ns("download_all"), "Download all as ZIP")
       )
+    )
+  )
+}
+
+backupServer <- function(id, user_id, user_playlists) {
+  moduleServer(id, function(input, output, session) {
+    observe(updateSelectizeInput(session, "playlists", choices = playlist_choices(user_playlists())))
+
+    output$notice <- renderUI(if (is.null(user_id())) login_notice())
+
+    selected <- reactive({
+      req(input$playlists)
+      dplyr::filter(user_playlists(), id %in% input$playlists)
     })
 
-    output$backup_download <- downloadHandler(
+    output$download <- downloadHandler(
       filename = function() {
-        req(input$backup_playlists)
-        if (length(input$backup_playlists) == 1) {
-          pname <- user_playlists() |> dplyr::filter(id == input$backup_playlists) |> dplyr::pull(name)
-          paste0(gsub("[^a-zA-Z0-9]", "_", pname), ".csv")
-        } else {
-          paste0("playlists_backup_", format(Sys.Date(), "%Y%m%d"), ".zip")
-        }
+        if (nrow(selected()) == 1) paste0(safe_filename(selected()$name), ".csv")
+        else paste0("playlists_backup_", format(Sys.Date(), "%Y%m%d"), ".zip")
       },
       content = function(file) {
-        req(input$backup_playlists)
-        if (length(input$backup_playlists) == 1) {
-          tracks <- backup_tracks(input$backup_playlists)
-          write.csv(tracks, file, row.names = FALSE)
-        } else {
-          tmp_dir <- file.path(tempdir(), paste0("backup_", as.integer(Sys.time())))
-          dir.create(tmp_dir, showWarnings = FALSE)
-          csv_files <- character(0)
-          for (pid in input$backup_playlists) {
-            pname    <- user_playlists() |> dplyr::filter(id == pid) |> dplyr::pull(name)
-            tracks   <- backup_tracks(pid)
-            csv_path <- file.path(tmp_dir, paste0(gsub("[^a-zA-Z0-9]", "_", pname), ".csv"))
-            write.csv(tracks, csv_path, row.names = FALSE)
-            csv_files <- c(csv_files, csv_path)
-          }
-          zip::zip(file, files = csv_files, mode = "cherry-pick")
-        }
+        if (nrow(selected()) == 1) write.csv(backup_tracks(selected()$id), file, row.names = FALSE)
+        else write_playlists_zip(selected(), file)
       }
     )
 
-    output$backup_all <- downloadHandler(
+    output$download_all <- downloadHandler(
       filename = function() paste0("full_backup_", format(Sys.Date(), "%Y%m%d"), ".zip"),
-      content = function(file) {
+      content  = function(file) {
         req(user_playlists())
-        all_ids <- user_playlists()$id
-        tmp_dir <- file.path(tempdir(), paste0("backup_all_", as.integer(Sys.time())))
-        dir.create(tmp_dir, showWarnings = FALSE)
-        csv_files <- character(0)
-        for (pid in all_ids) {
-          pname  <- user_playlists() |> dplyr::filter(id == pid) |> dplyr::pull(name)
-          tracks <- tryCatch(
-            backup_tracks(pid),
-            error = function(e) NULL
-          )
-          if (is.null(tracks) || nrow(tracks) == 0) next
-          csv_path <- file.path(tmp_dir, paste0(gsub("[^a-zA-Z0-9]", "_", pname), ".csv"))
-          write.csv(tracks, csv_path, row.names = FALSE)
-          csv_files <- c(csv_files, csv_path)
-        }
-        zip::zip(file, files = csv_files, mode = "cherry-pick")
+        write_playlists_zip(user_playlists(), file)
       }
     )
   })

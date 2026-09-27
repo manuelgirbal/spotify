@@ -1,4 +1,5 @@
 feature_cols <- c("popularity", "duration_min", "explicit", "release_year", "artist_popularity")
+feature_labels <- c("Popularity", "Duration (min)", "Explicit", "Release year", "Artist popularity")
 
 add_genre_columns <- function(tracks, n = 10) {
   all_genres <- unlist(tracks$genres)
