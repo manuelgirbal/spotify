@@ -9,7 +9,7 @@ clusteringUI <- function(id) {
   )
 }
 
-clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
+clusteringServer <- function(id, user_id_rv, user_playlists) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -17,36 +17,16 @@ clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
 
     observeEvent(input$auth_button, {
       tryCatch({
-        scope <- paste(
-          "user-read-recently-played",
-          "playlist-read-private",
-          "playlist-read-collaborative",
-          "playlist-modify-private"
-        )
-        endpoint <- httr::oauth_endpoint(
-          authorize = "https://accounts.spotify.com/authorize",
-          access    = "https://accounts.spotify.com/api/token"
-        )
-        app <- httr::oauth_app(
-          appname      = "spotifyr",
-          key          = Sys.getenv("SPOTIFY_CLIENT_ID"),
-          secret       = Sys.getenv("SPOTIFY_CLIENT_SECRET"),
-          redirect_uri = Sys.getenv("SPOTIFY_CLIENT_REDIRECT_URI")
-        )
-        access_token <- httr::oauth2.0_token(endpoint, app, scope = scope)
-        access_token_rv(access_token)
-
-        result <- fetch_user_playlists(access_token)
-        user_playlists(result$playlists)
-        user_id_rv(result$user_id)
+        me <- fetch_me()
+        user_playlists(fetch_user_playlists(me$id))
+        user_id_rv(me$id)
       }, error = function(e) {
-        access_token_rv(NULL)
         showNotification(paste("Authentication failed:", e$message), type = "error", duration = NULL)
       })
     })
 
     output$dynamic_sidebar <- renderUI({
-      if (!is.null(access_token_rv())) {
+      if (!is.null(user_id_rv())) {
         sidebarPanel(
           selectizeInput(
             ns("selected_playlists"),
@@ -112,7 +92,7 @@ clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
     })
 
     output$auth_status <- renderUI({
-      if (!is.null(access_token_rv())) {
+      if (!is.null(user_id_rv())) {
         "Authentication successful! You can now use the app."
       } else {
         HTML("With this app, you can select two of your Spotify playlists that you feel are a bit mixed up with each other and use them to create between 2 and 4 new playlists.
@@ -124,7 +104,7 @@ clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
     })
 
     output$dynamic_main_panel <- renderUI({
-      if (!is.null(access_token_rv())) {
+      if (!is.null(user_id_rv())) {
         if (!is.null(cluster_playlist())) {
           clusters_available <- sort(unique(cluster_playlist()$cluster))
           tabs <- lapply(clusters_available, function(cl) {
@@ -172,7 +152,7 @@ clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
       req(input$selected_playlists)
       playlists_filtered <- user_playlists() |> dplyr::filter(name %in% input$selected_playlists)
       playlistaudiofeatures <- tryCatch(
-        fetch_playlist_audio_features(playlists_filtered$id, access_token_rv()),
+        fetch_tracks_with_artists(playlists_filtered) |> add_genre_columns(),
         error = function(e) {
           showNotification(paste("Error fetching tracks:", e$message), type = "error", duration = NULL)
           NULL
@@ -182,13 +162,13 @@ clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
       playlistaudiofeatures |>
         dplyr::transmute(
           playlist_name,
-          track.id,
-          track.name,
-          artist.name       = purrr::map_chr(track.artists, function(x) x$name[1]),
-          popularity        = track.popularity,
-          duration          = round(track.duration_ms / 60000, 2),
-          explicit          = as.integer(track.explicit),
-          release_year      = as.integer(substr(track.album.release_date, 1, 4)),
+          track.id          = track_id,
+          track.name        = track_name,
+          artist.name       = artist_name,
+          popularity,
+          duration          = duration_min,
+          explicit          = as.integer(explicit),
+          release_year,
           artist_popularity,
           dplyr::across(dplyr::starts_with("genre_"))
         ) |>
@@ -349,7 +329,7 @@ clusteringServer <- function(id, access_token_rv, user_playlists, user_id_rv) {
         dplyr::pull(track.id) |>
         unique()
       tryCatch({
-        create_spotify_playlist(user_id_rv(), playlist_name, track_ids, access_token_rv())
+        create_playlist(user_id_rv(), playlist_name, track_ids)
         showNotification(
           paste0("Playlist '", playlist_name, "' created in Spotify."),
           type = "message", duration = 6

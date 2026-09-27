@@ -1,11 +1,8 @@
 library(shiny)
-library(httr)
-library(spotifyr)
 library(dplyr)
 library(DT)
 library(purrr)
 library(shinythemes)
-library(jsonlite)
 library(plotly)
 library(dbscan)
 library(zip)
@@ -19,12 +16,11 @@ ui <- navbarPage(
 )
 
 server <- function(input, output, session) {
-  access_token_rv <- reactiveVal(NULL)
   user_playlists  <- reactiveVal(NULL)
   user_id_rv      <- reactiveVal(NULL)
 
-  clusteringServer("clustering", access_token_rv, user_playlists, user_id_rv)
-  backupServer("backup", access_token_rv, user_playlists)
+  clusteringServer("clustering", user_id_rv, user_playlists)
+  backupServer("backup", user_id_rv, user_playlists)
 }
 
 options(shiny.port = 3838)

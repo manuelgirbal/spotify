@@ -1,14 +1,19 @@
+backup_tracks <- function(playlist_id) {
+  fetch_tracks(playlist_id) |>
+    dplyr::select(track_name, artist_name, album_name, duration_min, explicit, release_year, added_at)
+}
+
 backupUI <- function(id) {
   ns <- NS(id)
   uiOutput(ns("backup_panel"))
 }
 
-backupServer <- function(id, access_token_rv, user_playlists) {
+backupServer <- function(id, user_id_rv, user_playlists) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     output$backup_panel <- renderUI({
-      if (is.null(access_token_rv())) {
+      if (is.null(user_id_rv())) {
         return(p("Please authorize the app in the Clustering tab first."))
       }
       fluidRow(
@@ -45,7 +50,7 @@ backupServer <- function(id, access_token_rv, user_playlists) {
       content = function(file) {
         req(input$backup_playlists)
         if (length(input$backup_playlists) == 1) {
-          tracks <- fetch_backup_tracks(input$backup_playlists, access_token_rv())
+          tracks <- backup_tracks(input$backup_playlists)
           write.csv(tracks, file, row.names = FALSE)
         } else {
           tmp_dir <- file.path(tempdir(), paste0("backup_", as.integer(Sys.time())))
@@ -53,7 +58,7 @@ backupServer <- function(id, access_token_rv, user_playlists) {
           csv_files <- character(0)
           for (pid in input$backup_playlists) {
             pname    <- user_playlists() |> dplyr::filter(id == pid) |> dplyr::pull(name)
-            tracks   <- fetch_backup_tracks(pid, access_token_rv())
+            tracks   <- backup_tracks(pid)
             csv_path <- file.path(tmp_dir, paste0(gsub("[^a-zA-Z0-9]", "_", pname), ".csv"))
             write.csv(tracks, csv_path, row.names = FALSE)
             csv_files <- c(csv_files, csv_path)
@@ -74,7 +79,7 @@ backupServer <- function(id, access_token_rv, user_playlists) {
         for (pid in all_ids) {
           pname  <- user_playlists() |> dplyr::filter(id == pid) |> dplyr::pull(name)
           tracks <- tryCatch(
-            fetch_backup_tracks(pid, access_token_rv()),
+            backup_tracks(pid),
             error = function(e) NULL
           )
           if (is.null(tracks) || nrow(tracks) == 0) next
