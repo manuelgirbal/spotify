@@ -43,7 +43,7 @@ R, Shiny + bslib, httr2 (Spotify Web API, OAuth with PKCE), dplyr/tidyr/purrr, t
 
 ### 1. Spotify credentials
 
-Go to [developer.spotify.com](https://developer.spotify.com/dashboard), create an app, and copy the **Client ID** and **Client Secret**. Under the app settings, add this Redirect URI:
+Go to [developer.spotify.com](https://developer.spotify.com/dashboard), create an app, and copy the **Client ID**. No client secret is needed: login uses OAuth with PKCE. Under the app settings, add this Redirect URI:
 
 ```
 http://127.0.0.1:1410/
@@ -53,7 +53,6 @@ Create a `.Renviron` file in the project root (use `.Renviron.example` as refere
 
 ```
 SPOTIFY_CLIENT_ID=your_client_id
-SPOTIFY_CLIENT_SECRET=your_client_secret
 SPOTIFY_CLIENT_REDIRECT_URI=http://127.0.0.1:1410/
 ```
 
