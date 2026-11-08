@@ -12,6 +12,11 @@ A **local** Shiny app to analyze, reorganize and back up your Spotify playlists.
 
 ![clustering](screenshots/clustering.png)
 
+**Build**
+- Pick any of your playlists as sources and build a new playlist from their tracks with filters: date added, release year, popularity, genres, artists and explicit content
+- Tracks in several playlists count once, with the first date you added them
+- Exclude individual tracks by hand, then save the result as a new private playlist or download it as CSV
+
 **Organize**
 - Two playlists side by side with track metadata (album, year, duration, popularity, genres, date added)
 - Move or copy tracks between them. Changes stay pending (with Undo) until you confirm

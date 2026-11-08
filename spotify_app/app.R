@@ -8,6 +8,7 @@ ui <- page_navbar(
   fillable = FALSE,
   theme = bs_theme(version = 5, preset = "cyborg"),
   nav_panel("Clustering", clusteringUI("clustering")),
+  nav_panel("Build", buildUI("build")),
   nav_panel("Organize", organizeUI("organize")),
   nav_panel("Backup", backupUI("backup")),
   nav_spacer(),
@@ -33,6 +34,7 @@ server <- function(input, output, session) {
   })
 
   clusteringServer("clustering", user_id, user_playlists)
+  buildServer("build", user_id, user_playlists)
   organizeServer("organize", user_id, user_playlists, db_version)
   backupServer("backup", user_id, user_playlists, db_version)
 }
